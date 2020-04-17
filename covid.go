@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,6 +74,8 @@ var (
 	argSave    bool
 	argVerbose bool
 
+	wd string
+
 	cl *github.Client
 )
 
@@ -92,9 +95,18 @@ func main() {
 			log.SetOutput(ioutil.Discard)
 		}
 
+		if home, err := os.UserHomeDir(); err != nil {
+			log.Println("Could not get the user home dir")
+		} else {
+			wd = home + string(os.PathSeparator) + "covid" + string(os.PathSeparator)
+			if err := os.MkdirAll(filepath.Dir(wd), 0755); err != nil {
+				log.Printf("Could not create working dir: %v\n", wd)
+			}
+		}
+
 		var c *http.Client
 		if argCache {
-			c = &http.Client{Transport: httpcache.NewTransport(diskcache.New("cache"))}
+			c = &http.Client{Transport: httpcache.NewTransport(diskcache.New(wd + "cache"))}
 		}
 		cl = github.NewClient(c)
 
@@ -106,7 +118,7 @@ func main() {
 			go getRemote(context.Background(), paths[i], ci[i])
 			wg.Add(1)
 			co[i] = make(chan data, 1)
-			go convertAndSave(paths[i], ci[i], co[i], &wg)
+			go convertAndSave(wd+paths[i], ci[i], co[i], &wg)
 		}
 		wg.Wait()
 
