@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -72,6 +73,9 @@ var (
 	argCountry string
 	argCache   bool
 	argSave    bool
+	argTopc    bool
+	argTopd    bool
+	argTopr    bool
 	argVerbose bool
 
 	wd string
@@ -86,6 +90,9 @@ func init() {
 	rootCmd.Flags().StringVarP(&argCountry, "country", "c", "", "country to show number of cases for")
 	rootCmd.Flags().BoolVarP(&argCache, "cache", "e", true, "enable request caching")
 	rootCmd.Flags().BoolVarP(&argSave, "save", "s", true, "save/overwrite data in file")
+	rootCmd.Flags().BoolVarP(&argTopc, "top-confirmed", "t", false, "Top 10 countries by most confirmed cases")
+	rootCmd.Flags().BoolVarP(&argTopd, "top-dead", "", false, "Top 10 countries by most dead cases")
+	rootCmd.Flags().BoolVarP(&argTopr, "top-recovered", "", false, "Top 10 countries by most recovered cases")
 	rootCmd.Flags().BoolVarP(&argVerbose, "verbose", "v", false, "more verbose operation information")
 }
 
@@ -158,6 +165,30 @@ func main() {
 			cdead.printCases("Dead", red)
 			crecov.printCases("Recovered", green)
 			w.Flush()
+		}
+
+		if argTopc {
+			conf.sort()
+			fmt.Printf("\n%v\n", bold("Top 10 countries by most confirmed cases"))
+			for i := 0; i < 10; i++ {
+				fmt.Printf("%v\n", yellow(i+1, "-", conf.records[i].country))
+			}
+		}
+
+		if argTopd {
+			dead.sort()
+			fmt.Printf("\n%v\n", bold("Top 10 countries by most dead cases"))
+			for i := 0; i < 10; i++ {
+				fmt.Printf("%v\n", red(i+1, "-", dead.records[i].country))
+			}
+		}
+
+		if argTopr {
+			recov.sort()
+			fmt.Printf("\n%v\n", bold("Top 10 countries by most recovered cases"))
+			for i := 0; i < 10; i++ {
+				fmt.Printf("%v\n", green(i+1, "-", recov.records[i].country))
+			}
 		}
 	}
 	rootCmd.Execute()
@@ -267,6 +298,12 @@ func (d data) printCases(caseType string, colorFunc func(a ...interface{}) strin
 	t := d.sum(-1)
 	n := t - d.sum(-2)
 	fmt.Fprintf(w, "%v: \t%v \tNew: %v\n", caseType, colorFunc(p.Sprint(t)), colorFunc(p.Sprint(n)))
+}
+
+func (d data) sort() {
+	sort.Slice(d.records, func(i, j int) bool {
+		return d.records[i].cases[len(d.records[0].cases)-1] > d.records[j].cases[len(d.records[0].cases)-1]
+	})
 }
 
 func atof(s string) float32 {
