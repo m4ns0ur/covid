@@ -85,7 +85,7 @@ var (
 
 func init() {
 	rootCmd.Use = "covid"
-	rootCmd.Short = "Show number of COVID-19 cases."
+	rootCmd.Short = "Shows number of COVID-19 cases."
 
 	rootCmd.Flags().StringVarP(&argCountry, "country", "c", "", "country to show number of cases for")
 	rootCmd.Flags().BoolVarP(&argCache, "cache", "e", true, "enable request caching")

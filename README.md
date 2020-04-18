@@ -1,13 +1,14 @@
 # covid
-Show number of COVID-19 cases.
+Shows number of COVID-19 cases.
 
 ## Install
-`go get github.com/m4ns0ur/covid`
+`GO111MODULE=on go get github.com/m4ns0ur/covid`
+Note that `$GOPATH/bin` should be in the path.
 
-## Use
+## Usage
 ```
 $ covid -h
-Show number of COVID-19 cases.
+Shows number of COVID-19 cases.
 
 Usage:
   covid [flags]
@@ -17,6 +18,9 @@ Flags:
   -c, --country string   country to show number of cases for
   -h, --help             help for covid
   -s, --save             save/overwrite data in file (default true)
+  -t, --top-confirmed    Top 10 countries by most confirmed cases
+      --top-dead         Top 10 countries by most dead cases
+      --top-recovered    Top 10 countries by most recovered cases
   -v, --verbose          more verbose operation information
 ```
 ## Dataset
