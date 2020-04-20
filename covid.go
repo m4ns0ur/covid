@@ -22,6 +22,7 @@ import (
 	"github.com/google/go-github/v30/github"
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
+	"github.com/guptarohit/asciigraph"
 	"github.com/spf13/cobra"
 	"golang.org/x/text/message"
 )
@@ -70,13 +71,14 @@ var (
 
 	rootCmd = &cobra.Command{}
 
-	argCountry string
-	argCache   bool
-	argSave    bool
-	argTopc    bool
-	argTopd    bool
-	argTopr    bool
-	argVerbose bool
+	fcache   bool
+	fsave    bool
+	ftopc    bool
+	ftopd    bool
+	ftopr    bool
+	fcountry string
+	fgraph   bool
+	fverbose bool
 
 	wd string
 
@@ -87,18 +89,19 @@ func init() {
 	rootCmd.Use = "covid"
 	rootCmd.Short = "Shows number of COVID-19 cases."
 
-	rootCmd.Flags().StringVarP(&argCountry, "country", "c", "", "country to show number of cases for")
-	rootCmd.Flags().BoolVarP(&argCache, "cache", "e", true, "enable request caching")
-	rootCmd.Flags().BoolVarP(&argSave, "save", "s", true, "save/overwrite data in file")
-	rootCmd.Flags().BoolVarP(&argTopc, "top-confirmed", "t", false, "Top 10 countries by most confirmed cases")
-	rootCmd.Flags().BoolVarP(&argTopd, "top-dead", "", false, "Top 10 countries by most dead cases")
-	rootCmd.Flags().BoolVarP(&argTopr, "top-recovered", "", false, "Top 10 countries by most recovered cases")
-	rootCmd.Flags().BoolVarP(&argVerbose, "verbose", "v", false, "more verbose operation information")
+	rootCmd.Flags().BoolVarP(&fcache, "cache", "e", true, "enable request caching")
+	rootCmd.Flags().BoolVarP(&fsave, "save", "s", true, "save/overwrite data in file")
+	rootCmd.Flags().BoolVarP(&ftopc, "top-confirmed", "t", false, "Top 10 countries by most confirmed cases")
+	rootCmd.Flags().BoolVarP(&ftopd, "top-dead", "", false, "Top 10 countries by most dead cases")
+	rootCmd.Flags().BoolVarP(&ftopr, "top-recovered", "", false, "Top 10 countries by most recovered cases")
+	rootCmd.Flags().StringVarP(&fcountry, "country", "c", "", "country to show number of cases for")
+	rootCmd.Flags().BoolVarP(&fgraph, "graph", "", false, "plot graph, only if country is selected")
+	rootCmd.Flags().BoolVarP(&fverbose, "verbose", "v", false, "more verbose operation information")
 }
 
 func main() {
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
-		if !argVerbose {
+		if !fverbose {
 			log.SetOutput(ioutil.Discard)
 		}
 
@@ -112,7 +115,7 @@ func main() {
 		}
 
 		var c *http.Client
-		if argCache {
+		if fcache {
 			c = &http.Client{Transport: httpcache.NewTransport(diskcache.New(wd + "cache"))}
 		}
 		cl = github.NewClient(c)
@@ -140,34 +143,40 @@ func main() {
 		recov.printCases("Recovered", green)
 		w.Flush()
 
-		if argCountry != "" {
-			cconf, found := conf.filter(argCountry)
+		if fcountry != "" {
+			cconf, found := conf.filter(fcountry)
 			if !found {
-				fmt.Printf("\nCountry %v is not in the list\n", bold(argCountry))
+				fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
 				os.Exit(1)
 			}
 
-			cdead, found := dead.filter(argCountry)
+			cdead, found := dead.filter(fcountry)
 			if !found {
-				fmt.Printf("\nCountry %v is not in the list\n", bold(argCountry))
+				fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
 				os.Exit(1)
 			}
 
-			crecov, found := recov.filter(argCountry)
+			crecov, found := recov.filter(fcountry)
 			if !found {
-				fmt.Printf("\nCountry %v is not in the list\n", bold(argCountry))
+				fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
 				os.Exit(1)
 			}
 
-			fmt.Printf("\n%v\n", bold(cconf.records[0].country))
+			fmt.Printf("\n%v\n", bold(cconf.country))
 			w.Init(os.Stdout, 0, 0, 0, ' ', 0)
 			cconf.printCases("Confirmed", yellow)
 			cdead.printCases("Dead", red)
 			crecov.printCases("Recovered", green)
 			w.Flush()
+
+			if fgraph {
+				cconf.printGraph("Confirmed", yellow)
+				cdead.printGraph("Dead", red)
+				crecov.printGraph("Recovered", green)
+			}
 		}
 
-		if argTopc {
+		if ftopc {
 			rconf := conf.reduce()
 			rconf.sort()
 			fmt.Printf("\n%v\n", bold("Top 10 countries by most confirmed cases"))
@@ -178,7 +187,7 @@ func main() {
 			w.Flush()
 		}
 
-		if argTopd {
+		if ftopd {
 			rdead := dead.reduce()
 			rdead.sort()
 			fmt.Printf("\n%v\n", bold("Top 10 countries by most dead cases"))
@@ -189,7 +198,7 @@ func main() {
 			w.Flush()
 		}
 
-		if argTopr {
+		if ftopr {
 			rrecov := recov.reduce()
 			rrecov.sort()
 			fmt.Printf("\n%v\n", bold("Top 10 countries by most recovered cases"))
@@ -212,16 +221,16 @@ func getRemote(ctx context.Context, path string, ch chan<- remoteData) {
 
 	select {
 	case <-ctx.Done():
-		fmt.Printf("Cannot get data: %v\n", ctx.Err())
+		fmt.Fprintf(os.Stderr, "Cannot get data: %v\n", ctx.Err())
 		os.Exit(1)
 	default:
 		repContent, _, resp, err := cl.Repositories.GetContents(ctx, "CSSEGISandData", "COVID-19", fmt.Sprintf("csse_covid_19_data/csse_covid_19_time_series/%s", path), nil)
 		if err != nil {
 			if _, ok := err.(*github.RateLimitError); ok {
-				fmt.Printf("hit rate limit: %v\n", err)
+				fmt.Fprintf(os.Stderr, "hit rate limit: %v\n", err)
 				os.Exit(1)
 			}
-			fmt.Printf("cannot get data: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cannot get data: %v\n", err)
 			os.Exit(1)
 		}
 		log.Printf("Response received: %v", resp)
@@ -236,22 +245,21 @@ func convertAndSave(path string, ci <-chan remoteData, co chan<- data, wg *sync.
 	log.Printf("Convert data, path: %v", path)
 	c, err := base64.StdEncoding.DecodeString(*rd.repoContent.Content)
 	if err != nil {
-		fmt.Printf("Cannot decode data: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Cannot decode data: %v\n", err)
 		os.Exit(1)
 	}
 	content := string(c)
 
-	if argSave {
+	if fsave {
 		f, err := os.Create(path)
 		if err != nil {
-			fmt.Printf("Cannot create file: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Cannot create file: %v\n", err)
 			os.Exit(1)
 		}
 		defer f.Close()
 
-		_, err = io.WriteString(f, content)
-		if err != nil {
-			fmt.Printf("Cannot write to file: %v\n", err)
+		if _, err = io.WriteString(f, content); err != nil {
+			fmt.Fprintf(os.Stderr, "Cannot write to file: %v\n", err)
 			os.Exit(1)
 		}
 		f.Sync()
@@ -260,7 +268,7 @@ func convertAndSave(path string, ci <-chan remoteData, co chan<- data, wg *sync.
 	r := csv.NewReader(strings.NewReader(content))
 	rr, err := r.ReadAll()
 	if err != nil {
-		fmt.Printf("Cannot read csv data: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Cannot read csv data: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -270,7 +278,7 @@ func convertAndSave(path string, ci <-chan remoteData, co chan<- data, wg *sync.
 		for j := 4; j < len(rr[0]); j++ {
 			n, err := strconv.Atoi(rr[i][j])
 			if err != nil {
-				fmt.Printf("Cannot convert number: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Cannot convert number: %v\n", err)
 				os.Exit(1)
 			}
 			cases = append(cases, n)
@@ -282,24 +290,24 @@ func convertAndSave(path string, ci <-chan remoteData, co chan<- data, wg *sync.
 	co <- data{rr[0], recs}
 }
 
-func (d data) filter(country string) (data, bool) {
-	var rs []record
+func (d data) filter(c string) (record, bool) {
+	d.reduce()
 	for i := 0; i < len(d.records); i++ {
-		if strings.EqualFold(d.records[i].country, country) {
-			rs = append(rs, d.records[i])
+		if strings.EqualFold(d.records[i].country, c) {
+			return d.records[i], true
 		}
 	}
-	return data{d.header, rs}, (len(rs) > 0)
+	return record{}, false
 }
 
 func (d data) reduce() data {
 	d.sortCountry()
 	var rs []record
-	country := ""
+	c := ""
 	for i := 0; i < len(d.records); i++ {
-		if d.records[i].country != country {
+		if d.records[i].country != c {
 			rs = append(rs, d.records[i])
-			country = d.records[i].country
+			c = d.records[i].country
 		} else {
 			l := len(rs) - 1
 			for j := 0; j < len(d.records[i].cases); j++ {
@@ -310,21 +318,21 @@ func (d data) reduce() data {
 	return data{d.header, rs}
 }
 
-func (d data) sum(col int) int {
-	if col < 0 {
-		col = len(d.records[0].cases) + col
+func (d data) sum(c int) int {
+	if c < 0 {
+		c = len(d.records[0].cases) + c
 	}
 	s := 0
 	for _, r := range d.records {
-		s += r.cases[col]
+		s += r.cases[c]
 	}
 	return s
 }
 
-func (d data) printCases(caseType string, colorFunc func(a ...interface{}) string) {
-	t := d.sum(-1)
-	n := t - d.sum(-2)
-	fmt.Fprintf(w, "%v: \t%v \tNew: %v\n", caseType, colorFunc(p.Sprint(t)), colorFunc(p.Sprint(n)))
+func (d data) printCases(t string, c func(a ...interface{}) string) {
+	s := d.sum(-1)
+	n := s - d.sum(-2)
+	fmt.Fprintf(w, "%v: \t%v \tNew: %v\n", t, c(p.Sprint(s)), c(p.Sprint(n)))
 }
 
 func (d data) sort() {
@@ -339,10 +347,26 @@ func (d data) sortCountry() {
 	})
 }
 
+func (r record) printCases(t string, c func(a ...interface{}) string) {
+	s := r.cases[len(r.cases)-1]
+	n := s - r.cases[len(r.cases)-2]
+	fmt.Fprintf(w, "%v: \t%v \tNew: %v\n", t, c(p.Sprint(s)), c(p.Sprint(n)))
+}
+
+func (r record) printGraph(t string, c func(a ...interface{}) string) {
+	var ff []float64
+	for _, n := range r.cases {
+		ff = append(ff, float64(n))
+	}
+	fmt.Println()
+	fmt.Println(c(asciigraph.Plot(ff, asciigraph.Caption(r.country+" - "+t), asciigraph.Width(70), asciigraph.Height(20))))
+
+}
+
 func atof(s string) float32 {
 	n, err := strconv.ParseFloat(s, 32)
 	if err != nil {
-		fmt.Printf("Cannot convert number: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Cannot convert number: %v\n", err)
 		os.Exit(1)
 	}
 	return float32(n)
