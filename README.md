@@ -16,6 +16,7 @@ Usage:
 Flags:
   -e, --cache            enable request caching (default true)
   -c, --country string   country to show number of cases for
+      --graph            plot graph, only if country is selected
   -h, --help             help for covid
   -s, --save             save/overwrite data in file (default true)
   -t, --top-confirmed    Top 10 countries by most confirmed cases
@@ -23,6 +24,10 @@ Flags:
       --top-recovered    Top 10 countries by most recovered cases
   -v, --verbose          more verbose operation information
 ```
+
+## Screenshot
+![screenshot-1](/.res/screenshot-1.png)
+
 ## Dataset
 It's using data provided by [Johns Hopkins CSSE](https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_time_series).
 
