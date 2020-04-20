@@ -168,27 +168,36 @@ func main() {
 		}
 
 		if argTopc {
-			conf.sort()
+			rconf := conf.reduce()
+			rconf.sort()
 			fmt.Printf("\n%v\n", bold("Top 10 countries by most confirmed cases"))
+			w.Init(os.Stdout, 20, 0, 0, '.', 0)
 			for i := 0; i < 10; i++ {
-				fmt.Printf("%v\n", yellow(i+1, "-", conf.records[i].country))
+				fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rconf.records[i].country, yellow(rconf.records[i].cases[len(rconf.records[i].cases)-1]))
 			}
+			w.Flush()
 		}
 
 		if argTopd {
-			dead.sort()
+			rdead := dead.reduce()
+			rdead.sort()
 			fmt.Printf("\n%v\n", bold("Top 10 countries by most dead cases"))
+			w.Init(os.Stdout, 20, 0, 0, '.', 0)
 			for i := 0; i < 10; i++ {
-				fmt.Printf("%v\n", red(i+1, "-", dead.records[i].country))
+				fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rdead.records[i].country, red(rdead.records[i].cases[len(rdead.records[i].cases)-1]))
 			}
+			w.Flush()
 		}
 
 		if argTopr {
-			recov.sort()
+			rrecov := recov.reduce()
+			rrecov.sort()
 			fmt.Printf("\n%v\n", bold("Top 10 countries by most recovered cases"))
+			w.Init(os.Stdout, 20, 0, 0, '.', 0)
 			for i := 0; i < 10; i++ {
-				fmt.Printf("%v\n", green(i+1, "-", recov.records[i].country))
+				fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rrecov.records[i].country, green(rrecov.records[i].cases[len(rrecov.records[i].cases)-1]))
 			}
+			w.Flush()
 		}
 	}
 	rootCmd.Execute()
@@ -283,6 +292,24 @@ func (d data) filter(country string) (data, bool) {
 	return data{d.header, rs}, (len(rs) > 0)
 }
 
+func (d data) reduce() data {
+	d.sortCountry()
+	var rs []record
+	country := ""
+	for i := 0; i < len(d.records); i++ {
+		if d.records[i].country != country {
+			rs = append(rs, d.records[i])
+			country = d.records[i].country
+		} else {
+			l := len(rs) - 1
+			for j := 0; j < len(d.records[i].cases); j++ {
+				rs[l].cases[j] += d.records[i].cases[j]
+			}
+		}
+	}
+	return data{d.header, rs}
+}
+
 func (d data) sum(col int) int {
 	if col < 0 {
 		col = len(d.records[0].cases) + col
@@ -303,6 +330,12 @@ func (d data) printCases(caseType string, colorFunc func(a ...interface{}) strin
 func (d data) sort() {
 	sort.Slice(d.records, func(i, j int) bool {
 		return d.records[i].cases[len(d.records[0].cases)-1] > d.records[j].cases[len(d.records[0].cases)-1]
+	})
+}
+
+func (d data) sortCountry() {
+	sort.Slice(d.records, func(i, j int) bool {
+		return d.records[i].country < d.records[j].country
 	})
 }
 
