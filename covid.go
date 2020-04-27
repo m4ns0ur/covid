@@ -116,7 +116,7 @@ func main() {
 
 		var c *http.Client
 		if fcache {
-			c = &http.Client{Transport: httpcache.NewTransport(diskcache.New(wd + "cache"))}
+			c = httpcache.NewTransport(diskcache.New(wd + "cache")).Client()
 		}
 		cl = github.NewClient(c)
 
