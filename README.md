@@ -1,4 +1,6 @@
 # covid
+[![goreportcard](https://goreportcard.com/badge/github.com/m4ns0ur/covid)](https://goreportcard.com/report/github.com/m4ns0ur/covid)
+
 Shows number of COVID-19 cases.
 
 ## Install
