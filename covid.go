@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -108,7 +109,7 @@ func main() {
 		if home, err := os.UserHomeDir(); err != nil {
 			log.Println("Could not get the user home dir")
 		} else {
-			wd = home + string(os.PathSeparator) + "covid" + string(os.PathSeparator)
+			wd = filepath.Join(home, "covid")
 			if err := os.MkdirAll(filepath.Dir(wd), 0755); err != nil {
 				log.Printf("Could not create working dir: %v\n", wd)
 			}
@@ -116,7 +117,7 @@ func main() {
 
 		var c *http.Client
 		if fcache {
-			c = httpcache.NewTransport(diskcache.New(wd + "cache")).Client()
+			c = httpcache.NewTransport(diskcache.New(filepath.Join(wd, "cache"))).Client()
 		}
 		cl = github.NewClient(c)
 
@@ -128,7 +129,7 @@ func main() {
 			go getRemote(context.Background(), paths[i], ci[i])
 			wg.Add(1)
 			co[i] = make(chan data, 1)
-			go convertAndSave(wd+paths[i], ci[i], co[i], &wg)
+			go convertAndSave(path.Join(wd, paths[i]), ci[i], co[i], &wg)
 		}
 		wg.Wait()
 
