@@ -24,7 +24,7 @@ import (
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
 	"github.com/guptarohit/asciigraph"
-	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"golang.org/x/text/message"
 )
 
@@ -61,156 +61,168 @@ var paths = [3]string{
 }
 
 var (
-	bold   = color.New(color.Bold).SprintFunc()
-	green  = color.New(color.FgGreen).SprintFunc()
-	yellow = color.New(color.FgYellow).SprintFunc()
-	red    = color.New(color.FgRed).SprintFunc()
-
-	p = message.NewPrinter(message.MatchLanguage("en"))
-
-	w = new(tabwriter.Writer)
-
-	rootCmd = &cobra.Command{}
-
-	fcache   bool
-	fsave    bool
-	ftopc    bool
-	ftopd    bool
-	ftopr    bool
-	fcountry string
-	fgraph   bool
-	fverbose bool
-
-	wd string
-
+	p  = message.NewPrinter(message.MatchLanguage("en"))
+	w  = new(tabwriter.Writer)
 	cl *github.Client
 )
 
-func init() {
-	rootCmd.Use = "covid"
-	rootCmd.Short = "Shows number of COVID-19 cases."
-
-	rootCmd.Flags().BoolVarP(&fcache, "cache", "e", true, "enable request caching")
-	rootCmd.Flags().BoolVarP(&fsave, "save", "s", true, "save/overwrite data in file")
-	rootCmd.Flags().BoolVarP(&ftopc, "top-confirmed", "t", false, "Top 10 countries by most confirmed cases")
-	rootCmd.Flags().BoolVarP(&ftopd, "top-dead", "", false, "Top 10 countries by most dead cases")
-	rootCmd.Flags().BoolVarP(&ftopr, "top-recovered", "", false, "Top 10 countries by most recovered cases")
-	rootCmd.Flags().StringVarP(&fcountry, "country", "c", "", "country to show number of cases for")
-	rootCmd.Flags().BoolVarP(&fgraph, "graph", "", false, "plot graph, only if country is selected")
-	rootCmd.Flags().BoolVarP(&fverbose, "verbose", "v", false, "more verbose operation information")
-}
-
 func main() {
-	rootCmd.Run = func(cmd *cobra.Command, args []string) {
-		if !fverbose {
-			log.SetOutput(ioutil.Discard)
-		}
+	pflag.Usage = func() {
+		fmt.Fprint(os.Stdout, `Shows number of COVID-19 cases.
 
-		if home, err := os.UserHomeDir(); err != nil {
-			log.Println("Could not get the user home dir")
-		} else {
-			wd = filepath.Join(home, "covid")
-			if err := os.MkdirAll(filepath.Dir(wd), 0755); err != nil {
-				log.Printf("Could not create working dir: %v\n", wd)
-			}
-		}
+Usage:
+  covid [flags]
 
-		var c *http.Client
-		if fcache {
-			c = httpcache.NewTransport(diskcache.New(filepath.Join(wd, "cache"))).Client()
-		}
-		cl = github.NewClient(c)
+Flags:
+  -e, --cache            enable request caching (default true)
+  -c, --country string   country to show number of cases for
+  -g  --graph            plot graph, only if country is selected
+  -s, --save             save/overwrite data in file (default true)
+  -t, --top-confirmed    Top 10 countries by most confirmed cases
+      --top-dead         Top 10 countries by most dead cases
+      --top-recovered    Top 10 countries by most recovered cases
+  -v, --verbose          more verbose operation information
+  -h, --help             help for covid
+`)
+	}
 
-		var wg sync.WaitGroup
-		var ci [3]chan remoteData
-		var co [3]chan data
-		for i := 0; i < 3; i++ {
-			ci[i] = make(chan remoteData, 1)
-			go getRemote(context.Background(), paths[i], ci[i])
-			wg.Add(1)
-			co[i] = make(chan data, 1)
-			go convertAndSave(path.Join(wd, paths[i]), ci[i], co[i], &wg)
-		}
-		wg.Wait()
+	var (
+		fcache, fsave, ftopc, ftopd, ftopr, fgraph, fverbose, fhelp bool
+		fcountry                                                    string
+	)
 
-		conf := <-co[confirmed]
-		dead := <-co[dead]
-		recov := <-co[recovered]
+	pflag.BoolVarP(&fcache, "cache", "e", true, "enable request caching")
+	pflag.BoolVarP(&fsave, "save", "s", true, "save/overwrite data in file")
+	pflag.BoolVarP(&ftopc, "top-confirmed", "t", false, "Top 10 countries by most confirmed cases")
+	pflag.BoolVarP(&ftopd, "top-dead", "", false, "Top 10 countries by most dead cases")
+	pflag.BoolVarP(&ftopr, "top-recovered", "", false, "Top 10 countries by most recovered cases")
+	pflag.StringVarP(&fcountry, "country", "c", "", "country to show number of cases for")
+	pflag.BoolVarP(&fgraph, "graph", "g", false, "plot graph, only if country is selected")
+	pflag.BoolVarP(&fverbose, "verbose", "v", false, "more verbose operation information")
+	pflag.BoolVarP(&fhelp, "help", "h", false, "help for covid")
 
-		fmt.Printf("%v\n", bold("Globe"))
-		w.Init(os.Stdout, 0, 0, 0, ' ', 0)
-		conf.printCases("Confirmed", yellow)
-		dead.printCases("Dead", red)
-		recov.printCases("Recovered", green)
-		w.Flush()
+	pflag.Parse()
 
-		if fcountry != "" {
-			cconf, found := conf.filter(fcountry)
-			if !found {
-				fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
-				os.Exit(1)
-			}
+	if fhelp {
+		pflag.Usage()
+		os.Exit(0)
+	}
 
-			cdead, found := dead.filter(fcountry)
-			if !found {
-				fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
-				os.Exit(1)
-			}
+	if !fverbose {
+		log.SetOutput(ioutil.Discard)
+	}
 
-			crecov, found := recov.filter(fcountry)
-			if !found {
-				fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
-				os.Exit(1)
-			}
-
-			fmt.Printf("\n%v\n", bold(cconf.country))
-			w.Init(os.Stdout, 0, 0, 0, ' ', 0)
-			cconf.printCases("Confirmed", yellow)
-			cdead.printCases("Dead", red)
-			crecov.printCases("Recovered", green)
-			w.Flush()
-
-			if fgraph {
-				cconf.printGraph("Confirmed", yellow)
-				cdead.printGraph("Dead", red)
-				crecov.printGraph("Recovered", green)
-			}
-		}
-
-		if ftopc {
-			rconf := conf.reduce()
-			rconf.sort()
-			fmt.Printf("\n%v\n", bold("Top 10 countries by most confirmed cases"))
-			w.Init(os.Stdout, 20, 0, 0, '.', 0)
-			for i := 0; i < 10; i++ {
-				fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rconf.records[i].country, yellow(rconf.records[i].cases[len(rconf.records[i].cases)-1]))
-			}
-			w.Flush()
-		}
-
-		if ftopd {
-			rdead := dead.reduce()
-			rdead.sort()
-			fmt.Printf("\n%v\n", bold("Top 10 countries by most dead cases"))
-			w.Init(os.Stdout, 20, 0, 0, '.', 0)
-			for i := 0; i < 10; i++ {
-				fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rdead.records[i].country, red(rdead.records[i].cases[len(rdead.records[i].cases)-1]))
-			}
-			w.Flush()
-		}
-
-		if ftopr {
-			rrecov := recov.reduce()
-			rrecov.sort()
-			fmt.Printf("\n%v\n", bold("Top 10 countries by most recovered cases"))
-			w.Init(os.Stdout, 20, 0, 0, '.', 0)
-			for i := 0; i < 10; i++ {
-				fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rrecov.records[i].country, green(rrecov.records[i].cases[len(rrecov.records[i].cases)-1]))
-			}
-			w.Flush()
+	var wd string
+	if home, err := os.UserHomeDir(); err != nil {
+		log.Println("Could not get the user home dir")
+	} else {
+		wd = filepath.Join(home, "covid")
+		if err := os.MkdirAll(filepath.Dir(wd), 0755); err != nil {
+			log.Printf("Could not create working dir: %v\n", wd)
 		}
 	}
-	rootCmd.Execute()
+
+	var c *http.Client
+	if fcache {
+		c = httpcache.NewTransport(diskcache.New(filepath.Join(wd, "cache"))).Client()
+	}
+	cl = github.NewClient(c)
+
+	var wg sync.WaitGroup
+	var ci [3]chan remoteData
+	var co [3]chan data
+	for i := 0; i < 3; i++ {
+		ci[i] = make(chan remoteData, 1)
+		go getRemote(context.Background(), paths[i], ci[i])
+		wg.Add(1)
+		co[i] = make(chan data, 1)
+		go decode(path.Join(wd, paths[i]), ci[i], co[i], &wg, fsave)
+	}
+	wg.Wait()
+
+	conf := <-co[confirmed]
+	dead := <-co[dead]
+	recov := <-co[recovered]
+
+	var (
+		bold   = color.New(color.Bold).SprintFunc()
+		green  = color.New(color.FgGreen).SprintFunc()
+		yellow = color.New(color.FgYellow).SprintFunc()
+		red    = color.New(color.FgRed).SprintFunc()
+	)
+
+	fmt.Printf("%v\n", bold("Globe"))
+	w.Init(os.Stdout, 0, 0, 0, ' ', 0)
+	conf.printCases("Confirmed", yellow)
+	dead.printCases("Dead", red)
+	recov.printCases("Recovered", green)
+	w.Flush()
+
+	if fcountry != "" {
+		cconf, found := conf.filter(fcountry)
+		if !found {
+			fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
+			os.Exit(1)
+		}
+
+		cdead, found := dead.filter(fcountry)
+		if !found {
+			fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
+			os.Exit(1)
+		}
+
+		crecov, found := recov.filter(fcountry)
+		if !found {
+			fmt.Fprintf(os.Stderr, "\nCountry %v is not in the list\n", bold(fcountry))
+			os.Exit(1)
+		}
+
+		fmt.Printf("\n%v\n", bold(cconf.country))
+		w.Init(os.Stdout, 0, 0, 0, ' ', 0)
+		cconf.printCases("Confirmed", yellow)
+		cdead.printCases("Dead", red)
+		crecov.printCases("Recovered", green)
+		w.Flush()
+
+		if fgraph {
+			cconf.printGraph("Confirmed", yellow)
+			cdead.printGraph("Dead", red)
+			crecov.printGraph("Recovered", green)
+		}
+	}
+
+	if ftopc {
+		rconf := conf.reduce()
+		rconf.sort()
+		fmt.Printf("\n%v\n", bold("Top 10 countries by most confirmed cases"))
+		w.Init(os.Stdout, 20, 0, 0, '.', 0)
+		for i := 0; i < 10; i++ {
+			fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rconf.records[i].country, yellow(rconf.records[i].cases[len(rconf.records[i].cases)-1]))
+		}
+		w.Flush()
+	}
+
+	if ftopd {
+		rdead := dead.reduce()
+		rdead.sort()
+		fmt.Printf("\n%v\n", bold("Top 10 countries by most dead cases"))
+		w.Init(os.Stdout, 20, 0, 0, '.', 0)
+		for i := 0; i < 10; i++ {
+			fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rdead.records[i].country, red(rdead.records[i].cases[len(rdead.records[i].cases)-1]))
+		}
+		w.Flush()
+	}
+
+	if ftopr {
+		rrecov := recov.reduce()
+		rrecov.sort()
+		fmt.Printf("\n%v\n", bold("Top 10 countries by most recovered cases"))
+		w.Init(os.Stdout, 20, 0, 0, '.', 0)
+		for i := 0; i < 10; i++ {
+			fmt.Fprintf(w, "%2v-%v\t%v\n", i+1, rrecov.records[i].country, green(rrecov.records[i].cases[len(rrecov.records[i].cases)-1]))
+		}
+		w.Flush()
+	}
 }
 
 func getRemote(ctx context.Context, path string, ch chan<- remoteData) {
@@ -239,7 +251,7 @@ func getRemote(ctx context.Context, path string, ch chan<- remoteData) {
 	}
 }
 
-func convertAndSave(path string, ci <-chan remoteData, co chan<- data, wg *sync.WaitGroup) {
+func decode(path string, ci <-chan remoteData, co chan<- data, wg *sync.WaitGroup, save bool) {
 	defer close(co)
 
 	rd := <-ci
@@ -251,7 +263,7 @@ func convertAndSave(path string, ci <-chan remoteData, co chan<- data, wg *sync.
 	}
 	content := string(c)
 
-	if fsave {
+	if save {
 		f, err := os.Create(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Cannot create file: %v\n", err)

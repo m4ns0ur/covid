@@ -18,13 +18,13 @@ Usage:
 Flags:
   -e, --cache            enable request caching (default true)
   -c, --country string   country to show number of cases for
-      --graph            plot graph, only if country is selected
-  -h, --help             help for covid
+  -g  --graph            plot graph, only if country is selected
   -s, --save             save/overwrite data in file (default true)
   -t, --top-confirmed    Top 10 countries by most confirmed cases
       --top-dead         Top 10 countries by most dead cases
       --top-recovered    Top 10 countries by most recovered cases
   -v, --verbose          more verbose operation information
+  -h, --help             help for covid
 ```
 
 ## Screenshot
