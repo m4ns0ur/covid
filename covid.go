@@ -377,6 +377,9 @@ func (r record) printGraph(t string, c func(a ...interface{}) string) {
 }
 
 func atof(s string) float32 {
+	if s == "" {
+		return -1
+	}
 	n, err := strconv.ParseFloat(s, 32)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot convert number: %v\n", err)
