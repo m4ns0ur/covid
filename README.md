@@ -1,7 +1,7 @@
 # covid
 [![goreportcard](https://goreportcard.com/badge/github.com/m4ns0ur/covid)](https://goreportcard.com/report/github.com/m4ns0ur/covid)
 
-Shows number of COVID-19 cases.
+Small tool to check number of COVID-19 cases.
 
 ## Install
 `GO111MODULE=on go get github.com/m4ns0ur/covid`
