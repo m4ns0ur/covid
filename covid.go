@@ -247,6 +247,15 @@ func getRemote(ctx context.Context, path string, ch chan<- remoteData) {
 			os.Exit(1)
 		}
 		log.Printf("Response received: %v", resp)
+		if *repContent.Size >= (1 << 20) {
+			if len(*repContent.Content) > 0 {
+				panic(fmt.Errorf("invariant broken; response 'size' is >= 1MiB but 'content' is non-empty"))
+			}
+			if blob, _, err := cl.Git.GetBlob(ctx, "CSSEGISandData", "COVID-19", *repContent.SHA); err == nil {
+				repContent.Content = blob.Content
+			}
+		}
+
 		ch <- remoteData{repContent, resp}
 	}
 }
